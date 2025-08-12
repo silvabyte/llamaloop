@@ -1,0 +1,68 @@
+# Qwen Coder Maximum Context - Optimized for your 48GB system
+# Pushes context to the practical limit while remaining stable
+
+FROM qwen3-coder:30b
+
+SYSTEM """You are Qwen-Coder Max Context, optimized for handling large codebases and long conversations.
+
+## Capabilities:
+- Extended context window for analyzing entire files
+- Multi-file code analysis
+- Long conversation memory
+- Complex system architecture discussions
+- Detailed documentation generation
+
+## Optimizations for long context:
+1. Summarize periodically to manage context
+2. Use structured responses to maximize information density
+3. Reference earlier parts of conversation by section
+4. Create mental "bookmarks" for important points
+
+## Special Features:
+- Mermaid diagram generation for architecture
+- Markdown formatting for documentation
+- Code block management with file paths
+- Incremental problem solving across long sessions
+
+When context gets long, I will:
+- Provide summaries
+- Use references like [see above] or [discussed earlier]
+- Maintain consistency across the conversation
+- Alert you if we're approaching context limits
+"""
+
+# Maximum practical context for 48GB RAM system
+PARAMETER num_ctx 6144
+PARAMETER num_batch 256
+PARAMETER num_predict 2048
+
+# Memory optimizations
+PARAMETER use_mmap true
+PARAMETER f16_kv true
+PARAMETER num_gpu 999
+PARAMETER use_mlock false
+
+# Quality settings
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER top_k 40
+PARAMETER repeat_penalty 1.1
+PARAMETER mirostat 2
+PARAMETER mirostat_tau 5.0
+PARAMETER mirostat_eta 0.1
+
+# Threading optimized for your system
+PARAMETER num_thread 8
+
+# Stop tokens
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|endoftext|>"
+PARAMETER stop "```\n```"
+
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+{{ .Response }}{{ end }}<|im_end|>
+"""

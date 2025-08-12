@@ -1,7 +1,8 @@
-mod app;
-mod ui;
 mod api;
+mod app;
+mod chat;
 mod theme;
+mod ui;
 
 use anyhow::Result;
 use crossterm::{
@@ -17,6 +18,7 @@ use std::{io, time::Duration};
 use tokio::time::interval;
 
 use crate::app::{App, CurrentScreen};
+use crate::chat::InputMode;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -38,7 +40,7 @@ async fn main() -> Result<()> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        eprintln!("Error: {:?}", err);
+        eprintln!("Error: {err:?}");
     }
 
     Ok(())
@@ -46,13 +48,17 @@ async fn main() -> Result<()> {
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result<()> {
     let mut tick_interval = interval(Duration::from_millis(250));
-    
+
     loop {
         terminal.draw(|f| ui::draw(f, &mut app))?;
 
         tokio::select! {
             _ = tick_interval.tick() => {
                 app.on_tick().await;
+                // Process chat responses if streaming
+                if app.current_screen == CurrentScreen::Chat {
+                    app.process_chat_response().await;
+                }
             }
             _ = tokio::time::sleep(Duration::from_millis(50)) => {
                 if event::poll(Duration::from_millis(0))? {
@@ -61,6 +67,72 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                             CurrentScreen::Help => {
                                 if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
                                     app.current_screen = CurrentScreen::Dashboard;
+                                }
+                            }
+                            CurrentScreen::Chat => {
+                                // Handle chat-specific input
+                                match app.chat_state.input_mode {
+                                    InputMode::Editing => {
+                                        match key.code {
+                                            KeyCode::Enter => {
+                                                app.send_chat_message().await;
+                                            }
+                                            KeyCode::Esc => {
+                                                app.toggle_chat_input_mode();
+                                            }
+                                            KeyCode::Backspace => {
+                                                app.handle_chat_backspace();
+                                            }
+                                            KeyCode::Char(c) => {
+                                                app.handle_chat_input(c);
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    InputMode::Normal => {
+                                        match key.code {
+                                            KeyCode::Char('i') | KeyCode::Char('e') => {
+                                                app.toggle_chat_input_mode();
+                                            }
+                                            KeyCode::Char('c') => {
+                                                app.chat_state.current_session().clear_session();
+                                            }
+                                            KeyCode::Char('m') => {
+                                                app.chat_state.toggle_model_selector();
+                                            }
+                                            KeyCode::Char('n') => {
+                                                app.chat_state.new_session();
+                                            }
+                                            KeyCode::Tab => {
+                                                app.next_tab();
+                                            }
+                                            KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                                return Ok(());
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    InputMode::ModelSelection => {
+                                        match key.code {
+                                            KeyCode::Up => {
+                                                if app.chat_state.selected_model_index > 0 {
+                                                    app.chat_state.selected_model_index -= 1;
+                                                }
+                                            }
+                                            KeyCode::Down => {
+                                                if app.chat_state.selected_model_index < app.chat_state.available_models.len() - 1 {
+                                                    app.chat_state.selected_model_index += 1;
+                                                }
+                                            }
+                                            KeyCode::Enter => {
+                                                app.chat_state.select_model();
+                                            }
+                                            KeyCode::Esc => {
+                                                app.chat_state.toggle_model_selector();
+                                            }
+                                            _ => {}
+                                        }
+                                    }
                                 }
                             }
                             _ => {
@@ -95,15 +167,46 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                                     KeyCode::Char('4') => {
                                         app.selected_tab = 3;
                                         app.current_screen = CurrentScreen::Chat;
+                                        // Refresh models first to ensure we have the latest list
+                                        if app.models.is_empty() {
+                                            app.refresh().await;
+                                        }
+                                        app.initialize_chat();
                                     }
                                     KeyCode::Up => {
-                                        app.on_up();
+                                        if app.current_screen == app::CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer {
+                                            let endpoints_count = app::App::get_api_endpoints().len();
+                                            if endpoints_count > 0 {
+                                                let current = app.api_explorer_state.endpoints_list_state.selected().unwrap_or(0);
+                                                if current > 0 {
+                                                    app.api_explorer_state.endpoints_list_state.select(Some(current - 1));
+                                                    app.api_explorer_state.selected_endpoint = current - 1;
+                                                }
+                                            }
+                                        } else {
+                                            app.on_up();
+                                        }
                                     }
                                     KeyCode::Down => {
-                                        app.on_down();
+                                        if app.current_screen == app::CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer {
+                                            let endpoints_count = app::App::get_api_endpoints().len();
+                                            if endpoints_count > 0 {
+                                                let current = app.api_explorer_state.endpoints_list_state.selected().unwrap_or(0);
+                                                if current < endpoints_count - 1 {
+                                                    app.api_explorer_state.endpoints_list_state.select(Some(current + 1));
+                                                    app.api_explorer_state.selected_endpoint = current + 1;
+                                                }
+                                            }
+                                        } else {
+                                            app.on_down();
+                                        }
                                     }
                                     KeyCode::Enter => {
-                                        app.on_enter().await;
+                                        if app.current_screen == CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer {
+                                            app.execute_selected_endpoint().await;
+                                        } else {
+                                            app.on_enter().await;
+                                        }
                                     }
                                     KeyCode::Char('r') => {
                                         app.refresh().await;
@@ -111,13 +214,40 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                                     KeyCode::Char('p') if app.current_screen == CurrentScreen::Models => {
                                         app.toggle_pull_dialog();
                                     }
-                                    KeyCode::Char('d') if app.current_screen == CurrentScreen::Models => {
-                                        app.delete_selected_model().await;
+                                    KeyCode::Char('D') if app.current_screen == CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::Library => {
+                                        // Capital D (Shift+D) for delete - safer!
+                                        app.request_delete_model();
+                                    }
+                                    KeyCode::Char('i') if app.current_screen == CurrentScreen::Models => {
+                                        app.install_selected_available_model().await;
+                                    }
+                                    KeyCode::Char('t') if app.current_screen == CurrentScreen::Models => {
+                                        app.toggle_models_tab();
+                                    }
+                                    KeyCode::Char('n') if app.current_screen == CurrentScreen::Models && (app.models_tab_view == app::ModelsTabView::ApiExplorer || app.models_tab_view == app::ModelsTabView::Network) => {
+                                        app.discover_network_urls().await;
+                                    }
+                                    KeyCode::Char('d') if app.current_screen == CurrentScreen::Models && (app.models_tab_view == app::ModelsTabView::ApiExplorer || app.models_tab_view == app::ModelsTabView::Network) => {
+                                        app.discover_local_services().await;
+                                    }
+                                    KeyCode::Char('c') if app.current_screen == CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer => {
+                                        app.api_explorer_state.response_body.clear();
+                                    }
+                                    KeyCode::Char('v') if app.current_screen == CurrentScreen::Models => {
+                                        app.toggle_models_view();
                                     }
                                     KeyCode::Esc => {
                                         if app.show_pull_dialog {
                                             app.show_pull_dialog = false;
+                                        } else if app.show_delete_confirmation {
+                                            app.cancel_delete();
                                         }
+                                    }
+                                    KeyCode::Char('y') | KeyCode::Char('Y') if app.show_delete_confirmation => {
+                                        app.confirm_delete_model().await;
+                                    }
+                                    KeyCode::Char('n') | KeyCode::Char('N') if app.show_delete_confirmation => {
+                                        app.cancel_delete();
                                     }
                                     _ => {}
                                 }

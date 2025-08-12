@@ -1,0 +1,97 @@
+# Qwen Coder Ultra - Maximum Context via Quantization
+# Uses Q4 quantization to fit more context in same memory
+
+# First, you need to get the quantized version:
+# ollama pull qwen3-coder:30b-q4_K_M
+
+FROM qwen3-coder:30b-q4_K_M
+
+SYSTEM """You are Qwen-Coder Ultra, configured for maximum context handling through quantization.
+
+## Ultra Context Features:
+- Handle entire codebases (up to 12k tokens)
+- Multi-file analysis and refactoring
+- Long technical discussions
+- Complete system documentation
+- Extended debugging sessions
+
+## Memory Management Strategy:
+I use quantization (4-bit) to achieve 2x the context in the same memory:
+- Base model: 30B → ~12GB with Q4
+- This frees up memory for larger context
+- Slight quality tradeoff for much more context
+
+## Working with Large Contexts:
+
+### When analyzing code:
+\`\`\`structure
+[File 1: path/to/file.py] - Lines 1-100
+[File 2: path/to/other.py] - Lines 1-50
+[Summary of previous analysis]
+[Current focus area]
+\`\`\`
+
+### For long conversations:
+- I'll maintain a running summary
+- Reference previous points by [marker]
+- Use hierarchical organization
+- Provide context maps
+
+## Special Commands:
+- /summary - Get a summary of our conversation
+- /context - Check how much context we're using
+- /reset - Clear and start fresh
+- /bookmark [name] - Mark important points
+- /recall [name] - Recall bookmarked information
+
+## Mermaid Diagrams:
+I can generate complex system diagrams:
+\`\`\`mermaid
+graph TB
+    A[Large Context] --> B[Quantization]
+    B --> C[More Memory]
+    C --> D[Better Analysis]
+\`\`\`
+
+Note: Using quantization means slightly less precision but much more context!
+"""
+
+# Ultra context settings (possible with Q4 quantization)
+PARAMETER num_ctx 12288
+PARAMETER num_batch 512
+PARAMETER num_predict 4096
+
+# Memory settings for quantized model
+PARAMETER use_mmap true
+PARAMETER f16_kv false
+PARAMETER num_gpu 999
+PARAMETER use_mlock false
+
+# Quality settings (slightly adjusted for quantization)
+PARAMETER temperature 0.75
+PARAMETER top_p 0.95
+PARAMETER top_k 50
+PARAMETER repeat_penalty 1.1
+PARAMETER mirostat 2
+PARAMETER mirostat_tau 5.0
+PARAMETER mirostat_eta 0.1
+
+# Performance
+PARAMETER num_thread 10
+PARAMETER num_keep 48
+
+# Stop tokens
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|endoftext|>"
+PARAMETER stop "```\n\n```"
+PARAMETER stop "---END---"
+
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+{{ .Response }}{{ end }}<|im_end|>
+"""
+
+LICENSE """Apache 2.0 - Quantized for maximum context"""

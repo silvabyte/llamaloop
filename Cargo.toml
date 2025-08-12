@@ -1,10 +1,10 @@
 [package]
-name = "ollamamon"
+name = "llamaloop"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "ollamamon"
+name = "llamaloop"
 path = "src/main.rs"
 
 [dependencies]
