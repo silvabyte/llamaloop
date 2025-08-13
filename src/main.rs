@@ -182,7 +182,9 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                                         app.initialize_chat();
                                     }
                                     KeyCode::Up => {
-                                        if app.current_screen == app::CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer {
+                                        if app.current_screen == app::CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::Network {
+                                            app.select_prev_url();
+                                        } else if app.current_screen == app::CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer {
                                             let endpoints_count = app::App::get_api_endpoints().len();
                                             if endpoints_count > 0 {
                                                 let current = app.api_explorer_state.endpoints_list_state.selected().unwrap_or(0);
@@ -196,7 +198,9 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                                         }
                                     }
                                     KeyCode::Down => {
-                                        if app.current_screen == app::CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer {
+                                        if app.current_screen == app::CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::Network {
+                                            app.select_next_url();
+                                        } else if app.current_screen == app::CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer {
                                             let endpoints_count = app::App::get_api_endpoints().len();
                                             if endpoints_count > 0 {
                                                 let current = app.api_explorer_state.endpoints_list_state.selected().unwrap_or(0);
@@ -210,7 +214,9 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                                         }
                                     }
                                     KeyCode::Enter => {
-                                        if app.current_screen == CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer {
+                                        if app.current_screen == CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::Network {
+                                            app.copy_selected_url();
+                                        } else if app.current_screen == CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer {
                                             app.execute_selected_endpoint().await;
                                         } else {
                                             app.on_enter().await;
@@ -232,11 +238,11 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                                     KeyCode::Char('t') if app.current_screen == CurrentScreen::Models => {
                                         app.toggle_models_tab();
                                     }
-                                    KeyCode::Char('n') if app.current_screen == CurrentScreen::Models && (app.models_tab_view == app::ModelsTabView::ApiExplorer || app.models_tab_view == app::ModelsTabView::Network) => {
+                                    KeyCode::Char('n') if app.current_screen == CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::Network => {
                                         app.discover_network_urls().await;
                                     }
-                                    KeyCode::Char('d') if app.current_screen == CurrentScreen::Models && (app.models_tab_view == app::ModelsTabView::ApiExplorer || app.models_tab_view == app::ModelsTabView::Network) => {
-                                        app.discover_local_services().await;
+                                    KeyCode::Char('c') if app.current_screen == CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::Network => {
+                                        app.copy_selected_url();
                                     }
                                     KeyCode::Char('c') if app.current_screen == CurrentScreen::Models && app.models_tab_view == app::ModelsTabView::ApiExplorer => {
                                         app.api_explorer_state.response_body.clear();

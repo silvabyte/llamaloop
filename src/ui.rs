@@ -142,9 +142,9 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect) {
                 vec![
                     ("Tab", "Next"),
                     ("t", "Switch Tab"),
-                    ("n", "Discover URLs"),
-                    ("d", "Scan Network"),
-                    ("r", "Refresh"),
+                    ("↑↓", "Select URL"),
+                    ("c/Enter", "Copy URL"),
+                    ("n", "Refresh URLs"),
                     ("?", "Help"),
                 ]
             }
@@ -349,6 +349,15 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
         TokyoNight::GREEN
     };
 
+    // Format memory sizes for display
+    let used_str = format_size(app.status.used_memory, BINARY);
+    let total_str = format_size(app.status.total_memory, BINARY);
+    let memory_label = if app.status.total_memory > 0 {
+        format!("{used_str} / {total_str} ({memory_pct:.1}%)")
+    } else {
+        format!("{used_str} / ?")
+    };
+
     let memory_widget = Gauge::default()
         .block(
             Block::default()
@@ -363,8 +372,8 @@ fn draw_dashboard(f: &mut Frame, app: &App, area: Rect) {
                 .fg(memory_color)
                 .bg(TokyoNight::BG_HIGHLIGHT),
         )
-        .percent(memory_pct as u16)
-        .label(format!("{memory_pct:.1}%"));
+        .percent(memory_pct.min(100.0) as u16)
+        .label(memory_label);
     f.render_widget(memory_widget, top_chunks[3]);
 
     let bottom_chunks = Layout::default()
@@ -540,15 +549,204 @@ fn draw_api_explorer_view(f: &mut Frame, app: &mut App, area: Rect) {
 
 fn draw_network_view(f: &mut Frame, app: &mut App, area: Rect) {
     let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(60), // URLs list
+            Constraint::Percentage(40), // Instructions/Info
+        ])
         .split(area);
 
-    // Left - Network URLs
-    draw_network_urls(f, app, chunks[0]);
+    // Main - Selectable Network URLs
+    draw_network_urls_selectable(f, app, chunks[0]);
 
-    // Right - Discovered Services
-    draw_discovered_services(f, app, chunks[1]);
+    // Bottom - Instructions and copied status
+    draw_network_instructions(f, app, chunks[1]);
+}
+
+fn draw_network_urls_selectable(f: &mut Frame, app: &App, area: Rect) {
+    let items: Vec<ListItem> = if app.api_explorer_state.network_urls.is_empty() {
+        vec![ListItem::new(vec![
+            Line::from(vec![Span::styled(
+                "No network URLs discovered yet",
+                Style::default()
+                    .fg(TokyoNight::COMMENT)
+                    .add_modifier(Modifier::ITALIC),
+            )]),
+            Line::from(""),
+            Line::from(vec![Span::styled(
+                "Press 'n' to discover network URLs",
+                Style::default().fg(TokyoNight::FG_DARK),
+            )]),
+        ])]
+    } else {
+        app.api_explorer_state
+            .network_urls
+            .iter()
+            .enumerate()
+            .map(|(i, url)| {
+                let is_selected = i == app.api_explorer_state.selected_url_index;
+                let is_copied = app.api_explorer_state.copied_url.as_ref() == Some(url);
+
+                let icon = if is_copied {
+                    "✅"
+                } else if url.contains("localhost") {
+                    "🏠"
+                } else {
+                    "🌐"
+                };
+
+                let status = if is_copied {
+                    " (copied!)"
+                } else if is_selected {
+                    " ← Press 'c' or Enter to copy"
+                } else {
+                    ""
+                };
+
+                ListItem::new(vec![Line::from(vec![
+                    Span::styled(format!(" {icon} "), Style::default()),
+                    Span::styled(
+                        url,
+                        if is_selected {
+                            Style::default()
+                                .fg(TokyoNight::CYAN)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(TokyoNight::FG)
+                        },
+                    ),
+                    Span::styled(
+                        status,
+                        Style::default()
+                            .fg(if is_copied {
+                                TokyoNight::GREEN
+                            } else {
+                                TokyoNight::YELLOW
+                            })
+                            .add_modifier(Modifier::ITALIC),
+                    ),
+                ])])
+            })
+            .collect()
+    };
+
+    let urls_list = List::new(items)
+        .block(
+            Block::default()
+                .title("🌐 Network Access Points")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(TokyoNight::CYAN))
+                .style(Style::default().bg(TokyoNight::BG_DARK)),
+        )
+        .highlight_style(
+            Style::default()
+                .bg(TokyoNight::BG_HIGHLIGHT)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("▶ ");
+
+    f.render_widget(urls_list, area);
+}
+
+fn draw_network_instructions(f: &mut Frame, app: &App, area: Rect) {
+    let mut lines = vec![
+        Line::from(vec![Span::styled(
+            "Network Access Instructions",
+            Style::default()
+                .fg(TokyoNight::MAGENTA)
+                .add_modifier(Modifier::BOLD),
+        )]),
+        Line::from(""),
+    ];
+
+    if let Some(copied_url) = &app.api_explorer_state.copied_url {
+        lines.push(Line::from(vec![
+            Span::styled("✅ Copied: ", Style::default().fg(TokyoNight::GREEN)),
+            Span::styled(
+                copied_url,
+                Style::default()
+                    .fg(TokyoNight::CYAN)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]));
+        lines.push(Line::from(""));
+    }
+
+    lines.extend(vec![
+        Line::from(vec![Span::styled(
+            "How to use these URLs:",
+            Style::default()
+                .fg(TokyoNight::FG)
+                .add_modifier(Modifier::UNDERLINED),
+        )]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("1. ", Style::default().fg(TokyoNight::YELLOW)),
+            Span::styled(
+                "Select a URL with ↑/↓ arrows",
+                Style::default().fg(TokyoNight::FG_DARK),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("2. ", Style::default().fg(TokyoNight::YELLOW)),
+            Span::styled(
+                "Press 'c' or Enter to copy to clipboard",
+                Style::default().fg(TokyoNight::FG_DARK),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("3. ", Style::default().fg(TokyoNight::YELLOW)),
+            Span::styled(
+                "Use the URL to access Ollama from:",
+                Style::default().fg(TokyoNight::FG_DARK),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("   "),
+            Span::styled(
+                "• Other devices on your network",
+                Style::default().fg(TokyoNight::GREEN),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("   "),
+            Span::styled(
+                "• Docker containers",
+                Style::default().fg(TokyoNight::GREEN),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("   "),
+            Span::styled(
+                "• Remote applications",
+                Style::default().fg(TokyoNight::GREEN),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Example: ", Style::default().fg(TokyoNight::BLUE)),
+            Span::styled(
+                "OLLAMA_HOST=<copied-url> your-app",
+                Style::default()
+                    .fg(TokyoNight::FG_DARK)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+        ]),
+    ]);
+
+    let instructions = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title("📖 Usage Guide")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(TokyoNight::PURPLE))
+                .style(Style::default().bg(TokyoNight::BG_DARK)),
+        )
+        .wrap(Wrap { trim: false });
+
+    f.render_widget(instructions, area);
 }
 
 fn draw_network_urls(f: &mut Frame, app: &App, area: Rect) {

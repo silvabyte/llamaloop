@@ -42,6 +42,11 @@ struct ProcessListResponse {
     models: Vec<RunningModel>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct VersionResponse {
+    pub version: String,
+}
+
 #[derive(Debug, Serialize)]
 struct PullRequest {
     name: String,
@@ -87,6 +92,23 @@ impl OllamaClient {
         {
             Ok(response) => Ok(response.status().is_success()),
             Err(_) => Ok(false),
+        }
+    }
+
+    pub async fn get_version(&self) -> Result<String> {
+        match self
+            .client
+            .get(format!("{}/api/version", self.base_url))
+            .send()
+            .await
+        {
+            Ok(response) if response.status().is_success() => {
+                match response.json::<VersionResponse>().await {
+                    Ok(version_info) => Ok(version_info.version),
+                    Err(_) => Ok("Unknown".to_string()),
+                }
+            }
+            _ => Ok("Unknown".to_string()),
         }
     }
 

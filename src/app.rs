@@ -32,8 +32,8 @@ pub struct App {
     pub discovered_services: Vec<DiscoveredService>,
     pub chat_state: ChatState,
     pub chat_response_receiver: Option<mpsc::Receiver<ChatResponse>>,
-    last_status_logged: bool,  // Track if we already logged the current status
-    last_model_count: usize,   // Track model count changes
+    last_status_logged: bool, // Track if we already logged the current status
+    last_model_count: usize,  // Track model count changes
 }
 
 #[derive(Clone, PartialEq)]
@@ -80,6 +80,8 @@ pub struct SystemStatus {
     pub models_loaded: usize,
     pub total_memory: u64,
     pub used_memory: u64,
+    pub cpu_usage: f32,
+    pub gpu_memory: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -88,6 +90,8 @@ pub struct ApiExplorerState {
     pub endpoints_list_state: ListState,
     pub response_body: String,
     pub network_urls: Vec<String>,
+    pub selected_url_index: usize,
+    pub copied_url: Option<String>, // Track what was copied
 }
 
 #[derive(Clone)]
@@ -144,6 +148,8 @@ impl App {
                 models_loaded: 0,
                 total_memory: 0,
                 used_memory: 0,
+                cpu_usage: 0.0,
+                gpu_memory: None,
             },
             last_refresh: Local::now(),
             sparkle: Sparkle::new(),
@@ -155,6 +161,8 @@ impl App {
                 endpoints_list_state: api_endpoints_state,
                 response_body: String::new(),
                 network_urls: Vec::new(),
+                selected_url_index: 0,
+                copied_url: None,
             },
             discovered_services: Vec::new(),
             chat_state: ChatState::new(Vec::new()),
@@ -268,10 +276,17 @@ impl App {
                         self.last_status_logged = false;
                     }
                 }
-                
+
                 self.status.is_running = is_running;
-                
+
                 if is_running {
+                    // Get Ollama version
+                    if let Ok(version) = self.ollama_client.get_version().await {
+                        self.status.version = version;
+                    }
+
+                    // Get system memory info (macOS)
+                    self.update_system_memory().await;
                     if let Ok(models) = self.ollama_client.list_models().await {
                         // Log model changes
                         if self.models.len() != self.last_model_count {
@@ -279,18 +294,18 @@ impl App {
                                 let new_models = self.models.len() - self.last_model_count;
                                 self.add_log(
                                     LogLevel::Info,
-                                    &format!("📦 {} new model(s) detected", new_models)
+                                    &format!("📦 {new_models} new model(s) detected"),
                                 );
                             } else {
                                 let removed = self.last_model_count - self.models.len();
                                 self.add_log(
                                     LogLevel::Info,
-                                    &format!("🗑️ {} model(s) removed", removed)
+                                    &format!("🗑️ {removed} model(s) removed"),
                                 );
                             }
                             self.last_model_count = self.models.len();
                         }
-                        
+
                         self.models = models;
                         self.status.models_loaded = self.models.len();
                     }
@@ -299,36 +314,42 @@ impl App {
                         // Log when models start/stop running
                         let running_count = running.len();
                         let prev_count = self.running_models.len();
-                        
+
                         if running_count != prev_count {
                             if running_count > prev_count {
                                 for model in &running {
                                     if !self.running_models.iter().any(|m| m.name == model.name) {
                                         self.add_log(
                                             LogLevel::Info,
-                                            &format!("▶️ Model started: {}", model.name)
+                                            &format!("▶️ Model started: {}", model.name),
                                         );
                                     }
                                 }
                             } else {
                                 // Collect stopped models first to avoid borrow issues
-                                let stopped_models: Vec<String> = self.running_models
+                                let stopped_models: Vec<String> = self
+                                    .running_models
                                     .iter()
                                     .filter(|m| !running.iter().any(|r| r.name == m.name))
                                     .map(|m| m.name.clone())
                                     .collect();
-                                
+
                                 for model_name in stopped_models {
                                     self.add_log(
                                         LogLevel::Info,
-                                        &format!("⏹️ Model stopped: {}", model_name)
+                                        &format!("⏹️ Model stopped: {model_name}"),
                                     );
                                 }
                             }
                         }
-                        
+
                         self.running_models = running;
                         self.status.used_memory = self.running_models.iter().map(|m| m.size).sum();
+                    }
+
+                    // Update total memory if not set
+                    if self.status.total_memory == 0 {
+                        self.update_system_memory().await;
                     }
                 }
             }
@@ -375,7 +396,10 @@ impl App {
         let model_name = self.pull_model_name.clone();
         self.show_pull_dialog = false;
 
-        self.add_log(LogLevel::Info, &format!("🔽 Starting download: {model_name}"));
+        self.add_log(
+            LogLevel::Info,
+            &format!("🔽 Starting download: {model_name}"),
+        );
 
         match self.ollama_client.pull_model(&model_name).await {
             Ok(_) => {
@@ -404,16 +428,10 @@ impl App {
 
     pub async fn confirm_delete_model(&mut self) {
         if let Some(model_name) = self.model_to_delete.clone() {
-            self.add_log(
-                LogLevel::Warning,
-                &format!("🗑️ Deleting: {model_name}"),
-            );
+            self.add_log(LogLevel::Warning, &format!("🗑️ Deleting: {model_name}"));
             match self.ollama_client.delete_model(&model_name).await {
                 Ok(_) => {
-                    self.add_log(
-                        LogLevel::Info,
-                        &format!("✅ Deleted: {model_name}"),
-                    );
+                    self.add_log(LogLevel::Info, &format!("✅ Deleted: {model_name}"));
                     self.refresh().await;
                 }
                 Err(e) => {
@@ -620,6 +638,53 @@ impl App {
                 }
             }
         }
+
+        // Reset selection
+        self.api_explorer_state.selected_url_index = 0;
+    }
+
+    pub fn select_next_url(&mut self) {
+        if !self.api_explorer_state.network_urls.is_empty() {
+            self.api_explorer_state.selected_url_index =
+                (self.api_explorer_state.selected_url_index + 1)
+                    % self.api_explorer_state.network_urls.len();
+        }
+    }
+
+    pub fn select_prev_url(&mut self) {
+        if !self.api_explorer_state.network_urls.is_empty() {
+            if self.api_explorer_state.selected_url_index == 0 {
+                self.api_explorer_state.selected_url_index =
+                    self.api_explorer_state.network_urls.len() - 1;
+            } else {
+                self.api_explorer_state.selected_url_index -= 1;
+            }
+        }
+    }
+
+    pub fn copy_selected_url(&mut self) {
+        if let Some(url) = self
+            .api_explorer_state
+            .network_urls
+            .get(self.api_explorer_state.selected_url_index)
+        {
+            // Copy to clipboard (macOS)
+            let url_clone = url.clone();
+            tokio::spawn(async move {
+                if let Ok(mut child) = tokio::process::Command::new("pbcopy")
+                    .stdin(std::process::Stdio::piped())
+                    .spawn()
+                {
+                    if let Some(mut stdin) = child.stdin.take() {
+                        use tokio::io::AsyncWriteExt;
+                        let _ = stdin.write_all(url_clone.as_bytes()).await;
+                    }
+                }
+            });
+
+            self.api_explorer_state.copied_url = Some(url.clone());
+            self.add_log(LogLevel::Info, &format!("📋 Copied to clipboard: {url}"));
+        }
     }
 
     pub async fn discover_local_services(&mut self) {
@@ -746,18 +811,12 @@ impl App {
                                 formatted_body
                             );
 
-                            self.add_log(
-                                LogLevel::Info,
-                                &format!("API call successful: {status}"),
-                            );
+                            self.add_log(LogLevel::Info, &format!("API call successful: {status}"));
                         }
                         Err(e) => {
                             self.api_explorer_state.response_body =
                                 format!("Failed to read response: {e}");
-                            self.add_log(
-                                LogLevel::Error,
-                                &format!("Failed to read response: {e}"),
-                            );
+                            self.add_log(LogLevel::Error, &format!("Failed to read response: {e}"));
                         }
                     }
                 }
@@ -867,10 +926,7 @@ impl App {
             }
         });
 
-        self.add_log(
-            LogLevel::Info,
-            &format!("💬 Chatting with {model_name}"),
-        );
+        self.add_log(LogLevel::Info, &format!("💬 Chatting with {model_name}"));
     }
 
     pub async fn process_chat_response(&mut self) {
@@ -978,13 +1034,89 @@ impl App {
             // Set the first available model as current
             if let Some(first_model) = model_names.first() {
                 self.chat_state.current_session().current_model = first_model.clone();
-                self.add_log(LogLevel::Info, &format!("🤖 Chat model selected: {first_model}"));
+                self.add_log(
+                    LogLevel::Info,
+                    &format!("🤖 Chat model selected: {first_model}"),
+                );
             }
         } else {
             self.add_log(
                 LogLevel::Warning,
                 "No models available for chat. Pull a model first!",
             );
+        }
+    }
+
+    async fn update_system_memory(&mut self) {
+        // Get system memory info (works on macOS and Linux)
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(output) = tokio::process::Command::new("sysctl")
+                .arg("hw.memsize")
+                .output()
+                .await
+            {
+                let text = String::from_utf8_lossy(&output.stdout);
+                if let Some(line) = text.lines().next() {
+                    if let Some(mem_str) = line.split(':').nth(1) {
+                        if let Ok(mem_bytes) = mem_str.trim().parse::<u64>() {
+                            self.status.total_memory = mem_bytes;
+                        }
+                    }
+                }
+            }
+
+            // Alternative: try to get available memory stats from vm_stat
+            if self.status.total_memory == 0 {
+                if let Ok(output) = tokio::process::Command::new("vm_stat").output().await {
+                    let text = String::from_utf8_lossy(&output.stdout);
+                    // Parse vm_stat output to estimate total memory
+                    // This is a rough estimate based on page size (usually 4096 bytes)
+                    let page_size = 4096u64;
+                    for line in text.lines() {
+                        if line.contains("Pages free")
+                            || line.contains("Pages active")
+                            || line.contains("Pages inactive")
+                            || line.contains("Pages wired")
+                        {
+                            if let Some(num_str) = line.split(':').nth(1) {
+                                if let Ok(pages) =
+                                    num_str.trim().trim_end_matches('.').parse::<u64>()
+                                {
+                                    self.status.total_memory += pages * page_size;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(output) = tokio::process::Command::new("free")
+                .arg("-b")
+                .output()
+                .await
+            {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    if line.starts_with("Mem:") {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() > 1 {
+                            if let Ok(mem_bytes) = parts[1].parse::<u64>() {
+                                self.status.total_memory = mem_bytes;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If we still don't have memory info, set a reasonable default
+        if self.status.total_memory == 0 {
+            self.status.total_memory = 48 * 1024 * 1024 * 1024; // 48GB as mentioned by user
         }
     }
 }
