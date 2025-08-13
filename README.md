@@ -16,8 +16,8 @@ A hypnotic Terminal User Interface (TUI) for orchestrating Ollama models in perf
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ollamamon.git
-cd ollamamon
+git clone https://github.com/silvabyte/llamaloop.git
+cd llamaloop
 
 # Build the project
 cargo build --release
@@ -33,14 +33,14 @@ Make sure Ollama is running:
 ollama serve
 ```
 
-Then launch Ollamamon:
+Then enter the loop:
 ```bash
-./target/release/ollamamon
+./target/release/llamaloop
 ```
 
 Or if installed globally:
 ```bash
-ollamamon
+llamaloop
 ```
 
 ## Keyboard Shortcuts
@@ -80,10 +80,10 @@ The TUI features four main tabs:
 
 ## Configuration
 
-Ollamamon connects to Ollama at `http://localhost:11434` by default. You can set a custom host:
+llamaloop connects to Ollama at `http://localhost:11434` by default. You can set a custom host:
 
 ```bash
-OLLAMA_HOST=http://192.168.1.100:11434 ollamamon
+OLLAMA_HOST=http://192.168.1.100:11434 llamaloop
 ```
 
 ## Requirements

@@ -163,3 +163,45 @@ pub fn pulse_color(base: Color, tick: usize) -> Color {
         _ => base,
     }
 }
+
+// Loop-inspired visual elements for llamaloop
+pub const LLAMALOOP_ASCII: &str = r#"
+    ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    ┃                                                        ┃
+    ┃     ╭─╮  ╭─╮                     ╭─╮                  ┃
+    ┃     │ │  │ │  ╔══╗ ╔══╗ ╔══╗    │ │  ╔══╗ ╔══╗ ╔══╗  ┃
+    ┃     │ │  │ │  ╚══╗ ╚══╗ ╚══╗ ── │ │  ╚══╗ ╚══╗ ╚══╗  ┃  
+    ┃     ╰─╯  ╰─╯  ╚══╝ ╚══╝ ╚══╝    ╰─╯  ╚══╝ ╚══╝ ╚══╝  ┃
+    ┃                                                        ┃
+    ┃              ∞ Where AI Models Loop Eternal ∞         ┃
+    ┃                                                        ┃
+    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+"#;
+
+pub const STARTUP_MESSAGE: &str = r#"
+    ╔════════════════════════════════════════════════════════╗
+    ║  Initializing llamaloop v0.1.0                        ║
+    ║  Part of the codeloops.ai universe                    ║
+    ║  Tokyo Night Theme • Hypnotic Interface               ║
+    ╚════════════════════════════════════════════════════════╝
+"#;
+
+// Loop animation characters for loading states
+pub const LOOP_FRAMES: &[&str] = &[
+    "◐", "◓", "◑", "◒", "◐", "◓", "◑", "◒"
+];
+
+// Infinity loop gradient colors for special effects
+pub const LOOP_GRADIENT: &[(u8, u8, u8)] = &[
+    (125, 207, 255), // Cyan
+    (122, 220, 254), // Light Cyan
+    (187, 154, 247), // Magenta
+    (157, 124, 216), // Purple
+    (125, 207, 255), // Back to Cyan (loop)
+];
+
+pub fn get_loop_color(progress: f32) -> Color {
+    let index = (progress * (LOOP_GRADIENT.len() - 1) as f32) as usize;
+    let (r, g, b) = LOOP_GRADIENT[index.min(LOOP_GRADIENT.len() - 1)];
+    Color::Rgb(r, g, b)
+}

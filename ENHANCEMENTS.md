@@ -1,4 +1,4 @@
-# Ollamamon Enhancement Plan
+# 🔄 llamaloop Enhancement Plan
 
 ## Priority 1: Core Functionality
 

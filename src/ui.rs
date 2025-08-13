@@ -64,7 +64,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         .split(area);
 
     // Title with gradient effect
-    let title_text = "🦙 Ollamamon";
+    let title_text = "🔄 llamaloop";
     let gradient_chars = theme::gradient_text(title_text, TokyoNight::CYAN, TokyoNight::MAGENTA);
     let title_spans: Vec<Span> = gradient_chars
         .iter()
@@ -1274,7 +1274,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 fn draw_help(f: &mut Frame, area: Rect) {
     let help_text = vec![
         Line::from(vec![Span::styled(
-            "✨ Ollamamon - Tokyo Night Edition",
+            "✨ llamaloop - Where AI Models Dance in Infinite Elegance",
             Style::default()
                 .fg(TokyoNight::CYAN)
                 .add_modifier(Modifier::BOLD),

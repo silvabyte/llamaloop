@@ -9,4 +9,4 @@ echo ""
 echo "Starting in 2 seconds..."
 sleep 2
 
-./target/release/ollamamon
+./target/release/llamaloop

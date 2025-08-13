@@ -1,10 +1,8 @@
 # Qwen Coder Ultra - Maximum Context via Quantization
 # Uses Q4 quantization to fit more context in same memory
 
-# First, you need to get the quantized version:
-# ollama pull qwen3-coder:30b-q4_K_M
-
-FROM qwen3-coder:30b-q4_K_M
+# Using your quantized model for maximum context
+FROM qwen3-coder:30b-a3b-q4_K_M
 
 SYSTEM """You are Qwen-Coder Ultra, configured for maximum context handling through quantization.
 

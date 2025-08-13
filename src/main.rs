@@ -22,6 +22,11 @@ use crate::chat::InputMode;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Print epic ASCII art before entering TUI mode
+    println!("\n{}", theme::LLAMALOOP_ASCII);
+    println!("{}", theme::STARTUP_MESSAGE);
+    std::thread::sleep(Duration::from_millis(1500));
+    
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;

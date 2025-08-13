@@ -32,7 +32,7 @@ release: ## 🚀 Build optimized release version
 	@echo "$(MAGENTA)Building release version...$(RESET)"
 	@cargo build --release
 	@echo "$(GREEN)✓ Release build complete!$(RESET)"
-	@ls -lh target/release/ollamamon | awk '{print "$(YELLOW)Binary size: " $$5 "$(RESET)"}'
+	@ls -lh target/release/llamaloop | awk '{print "$(YELLOW)Binary size: " $$5 "$(RESET)"}'
 
 .PHONY: run
 run: ## ▶️  Run the TUI application
@@ -82,16 +82,16 @@ clean: ## 🧹 Clean build artifacts
 	@echo "$(GREEN)✓ Cleaned!$(RESET)"
 
 .PHONY: install
-install: release ## 📦 Install ollamamon to cargo bin directory
-	@echo "$(MAGENTA)Installing ollamamon...$(RESET)"
+install: release ## 📦 Install llamaloop to cargo bin directory
+	@echo "$(MAGENTA)Installing llamaloop...$(RESET)"
 	@cargo install --path .
 	@echo "$(GREEN)✓ Installed to cargo bin!$(RESET)"
-	@echo "$(YELLOW)Run 'ollamamon' from anywhere!$(RESET)"
+	@echo "$(YELLOW)Run 'llamaloop' from anywhere!$(RESET)"
 
 .PHONY: uninstall
-uninstall: ## 🗑️  Uninstall ollamamon
-	@echo "$(YELLOW)Uninstalling ollamamon...$(RESET)"
-	@cargo uninstall ollamamon
+uninstall: ## 🗑️  Uninstall llamaloop
+	@echo "$(YELLOW)Uninstalling llamaloop...$(RESET)"
+	@cargo uninstall llamaloop
 	@echo "$(GREEN)✓ Uninstalled!$(RESET)"
 
 .PHONY: bench
@@ -121,10 +121,10 @@ update: ## 🔄 Update dependencies
 .PHONY: size
 size: release ## 📏 Analyze binary size
 	@echo "$(CYAN)Binary size analysis:$(RESET)"
-	@ls -lh target/release/ollamamon
+	@ls -lh target/release/llamaloop
 	@echo ""
 	@echo "$(YELLOW)Top 10 largest functions:$(RESET)"
-	@cargo bloat --release -n 10 2>/dev/null || (echo "Install cargo-bloat for detailed analysis: cargo install cargo-bloat" && ls -lh target/release/ollamamon)
+	@cargo bloat --release -n 10 2>/dev/null || (echo "Install cargo-bloat for detailed analysis: cargo install cargo-bloat" && ls -lh target/release/llamaloop)
 
 .PHONY: pre-commit
 pre-commit: fmt-check lint test ## 🎯 Run all checks before committing
@@ -150,7 +150,7 @@ ollama-stop: ## 🛑 Stop Ollama service
 demo: ollama-start release ## 🎬 Run a demo (starts Ollama and runs the app)
 	@echo "$(MAGENTA)✨ Starting Ollamamon Demo ✨$(RESET)"
 	@sleep 1
-	@./target/release/ollamamon
+	@./target/release/llamaloop
 
 .PHONY: sparkle
 sparkle: ## ✨ A surprise!
@@ -184,8 +184,8 @@ watch-ui: ## 👁️  Watch and rebuild on UI changes
 profile: ## 📈 Profile the application (macOS)
 	@echo "$(CYAN)Building with profiling...$(RESET)"
 	@cargo build --release
-	@echo "$(YELLOW)Run: cargo instruments -t 'CPU Profiler' --bin ollamamon$(RESET)"
-	@echo "$(YELLOW)Or use: samply record ./target/release/ollamamon$(RESET)"
+	@echo "$(YELLOW)Run: cargo instruments -t 'CPU Profiler' --bin llamaloop$(RESET)"
+	@echo "$(YELLOW)Or use: samply record ./target/release/llamaloop$(RESET)"
 
 .PHONY: todo
 todo: ## 📝 Show all TODOs in the codebase

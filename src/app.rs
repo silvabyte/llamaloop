@@ -114,7 +114,7 @@ impl App {
         logs.push_back(LogEntry {
             timestamp: Local::now(),
             level: LogLevel::Info,
-            message: "✨ Ollamamon started".to_string(),
+            message: "🔄 llamaloop initialized - entering the eternal dance".to_string(),
         });
 
         let mut models_list_state = ListState::default();
