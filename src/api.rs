@@ -1,11 +1,12 @@
 use anyhow::Result;
+use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use futures_util::StreamExt;
 use tokio::sync::mpsc;
 
+/// Client for interacting with Ollama API
 #[derive(Clone)]
 pub struct OllamaClient {
     pub client: Client,
@@ -244,82 +245,34 @@ impl OllamaClient {
         }
 
         let mut stream = response.bytes_stream();
-        
+
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
             let text = String::from_utf8_lossy(&chunk);
-            
+
             // Parse each line as a separate JSON response
             for line in text.lines() {
                 if line.trim().is_empty() {
                     continue;
                 }
-                
+
                 if let Ok(response) = serde_json::from_str::<ChatResponse>(line) {
                     let is_done = response.done.unwrap_or(false);
-                    
+
                     // Use try_send for non-blocking send to avoid slowing down the stream
                     match response_sender.try_send(response) {
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(mpsc::error::TrySendError::Full(resp)) => {
                             // If the channel is full, wait a tiny bit and try again
                             tokio::time::sleep(Duration::from_micros(100)).await;
                             let _ = response_sender.try_send(resp);
-                        },
+                        }
                         Err(mpsc::error::TrySendError::Closed(_)) => {
                             // Receiver dropped, stop processing
                             return Ok(());
                         }
                     }
-                    
-                    if is_done {
-                        break;
-                    }
-                }
-            }
-        }
 
-        Ok(())
-    }
-
-    pub async fn generate(
-        &self,
-        model: &str,
-        prompt: &str,
-        response_sender: mpsc::Sender<GenerateResponse>,
-    ) -> Result<()> {
-        let request = GenerateRequest {
-            model: model.to_string(),
-            prompt: prompt.to_string(),
-            stream: true,
-        };
-
-        let response = self
-            .client
-            .post(format!("{}/api/generate", self.base_url))
-            .json(&request)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            anyhow::bail!("Generate request failed: {}", response.status());
-        }
-
-        let mut stream = response.bytes_stream();
-        
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
-            let text = String::from_utf8_lossy(&chunk);
-            
-            for line in text.lines() {
-                if line.trim().is_empty() {
-                    continue;
-                }
-                
-                if let Ok(response) = serde_json::from_str::<GenerateResponse>(line) {
-                    let is_done = response.done;
-                    response_sender.send(response).await?;
-                    
                     if is_done {
                         break;
                     }
@@ -338,44 +291,15 @@ struct ChatRequest {
     stream: bool,
 }
 
-#[derive(Debug, Serialize)]
-struct GenerateRequest {
-    model: String,
-    prompt: String,
-    stream: bool,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatResponse {
-    pub model: Option<String>,
-    pub created_at: Option<String>,
     pub message: Option<ChatMessage>,
     pub done: Option<bool>,
-    pub total_duration: Option<u64>,
-    pub load_duration: Option<u64>,
-    pub prompt_eval_count: Option<u32>,
-    pub prompt_eval_duration: Option<u64>,
     pub eval_count: Option<u32>,
-    pub eval_duration: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct GenerateResponse {
-    pub model: String,
-    pub created_at: String,
-    pub response: String,
-    pub done: bool,
-    pub context: Option<Vec<u32>>,
-    pub total_duration: Option<u64>,
-    pub load_duration: Option<u64>,
-    pub prompt_eval_count: Option<u32>,
-    pub prompt_eval_duration: Option<u64>,
-    pub eval_count: Option<u32>,
-    pub eval_duration: Option<u64>,
 }

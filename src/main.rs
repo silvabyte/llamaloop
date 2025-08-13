@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     println!("\n{}", theme::LLAMALOOP_ASCII);
     println!("{}", theme::STARTUP_MESSAGE);
     std::thread::sleep(Duration::from_millis(1500));
-    
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
@@ -58,7 +58,9 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
         terminal.draw(|f| ui::draw(f, &mut app))?;
 
         // Process chat responses immediately if streaming (for smooth experience)
-        if app.current_screen == CurrentScreen::Chat && app.chat_state.current_session().is_streaming {
+        if app.current_screen == CurrentScreen::Chat
+            && app.chat_state.current_session().is_streaming
+        {
             app.process_chat_response().await;
         }
 

@@ -7,9 +7,6 @@ pub struct ChatMessage {
     pub role: MessageRole,
     pub content: String,
     pub timestamp: DateTime<Local>,
-    pub model: Option<String>,
-    pub tokens: Option<usize>,
-    pub response_time: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -48,16 +45,9 @@ impl ChatSession {
             role,
             content,
             timestamp: Local::now(),
-            model: if role == MessageRole::Assistant {
-                Some(self.current_model.clone())
-            } else {
-                None
-            },
-            tokens: None,
-            response_time: None,
         };
         self.messages.push_back(message);
-        
+
         // Keep only last 100 messages to prevent memory issues
         while self.messages.len() > 100 {
             self.messages.pop_front();
@@ -78,24 +68,6 @@ impl ChatSession {
             MessageRole::System,
             format!("Switched to model: {}", self.current_model),
         );
-    }
-
-    pub fn export_session(&self) -> String {
-        let mut export = String::new();
-        export.push_str(&format!("# Chat Session - {}\n", self.session_started.format("%Y-%m-%d %H:%M:%S")));
-        export.push_str(&format!("Model: {}\n\n", self.current_model));
-        
-        for msg in &self.messages {
-            let role = match msg.role {
-                MessageRole::System => "System",
-                MessageRole::User => "User",
-                MessageRole::Assistant => "Assistant",
-            };
-            export.push_str(&format!("## {} [{}]\n", role, msg.timestamp.format("%H:%M:%S")));
-            export.push_str(&format!("{}\n\n", msg.content));
-        }
-        
-        export
     }
 
     pub fn get_context_for_api(&self) -> Vec<serde_json::Value> {
@@ -120,7 +92,6 @@ impl ChatSession {
 pub struct ChatState {
     pub sessions: Vec<ChatSession>,
     pub active_session_index: usize,
-    pub scroll_offset: usize,
     pub input_mode: InputMode,
     pub show_model_selector: bool,
     pub available_models: Vec<String>,
@@ -136,17 +107,16 @@ pub enum InputMode {
 
 impl ChatState {
     pub fn new(available_models: Vec<String>) -> Self {
-        let default_model = available_models.first()
+        let default_model = available_models
+            .first()
             .cloned()
             .unwrap_or_else(|| "llama3.1:latest".to_string());
-        
-        let mut sessions = Vec::new();
-        sessions.push(ChatSession::new(default_model));
-        
+
+        let sessions = vec![ChatSession::new(default_model)];
+
         Self {
             sessions,
             active_session_index: 0,
-            scroll_offset: 0,
             input_mode: InputMode::Normal,
             show_model_selector: false,
             available_models,
@@ -162,27 +132,6 @@ impl ChatState {
         let model = self.current_session().current_model.clone();
         self.sessions.push(ChatSession::new(model));
         self.active_session_index = self.sessions.len() - 1;
-    }
-
-    pub fn delete_session(&mut self) {
-        if self.sessions.len() > 1 {
-            self.sessions.remove(self.active_session_index);
-            if self.active_session_index >= self.sessions.len() {
-                self.active_session_index = self.sessions.len() - 1;
-            }
-        }
-    }
-
-    pub fn next_session(&mut self) {
-        if self.active_session_index < self.sessions.len() - 1 {
-            self.active_session_index += 1;
-        }
-    }
-
-    pub fn previous_session(&mut self) {
-        if self.active_session_index > 0 {
-            self.active_session_index -= 1;
-        }
     }
 
     pub fn toggle_model_selector(&mut self) {
