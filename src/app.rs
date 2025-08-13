@@ -32,6 +32,8 @@ pub struct App {
     pub discovered_services: Vec<DiscoveredService>,
     pub chat_state: ChatState,
     pub chat_response_receiver: Option<mpsc::Receiver<ChatResponse>>,
+    last_status_logged: bool,  // Track if we already logged the current status
+    last_model_count: usize,   // Track model count changes
 }
 
 #[derive(Clone, PartialEq)]
@@ -157,6 +159,8 @@ impl App {
             discovered_services: Vec::new(),
             chat_state: ChatState::new(Vec::new()),
             chat_response_receiver: None,
+            last_status_logged: false,
+            last_model_count: 0,
         }
     }
 
@@ -254,26 +258,85 @@ impl App {
 
         match self.ollama_client.check_status().await {
             Ok(is_running) => {
+                // Only log status changes
+                if self.status.is_running != is_running {
+                    if is_running {
+                        self.add_log(LogLevel::Info, "✅ Ollama server connected");
+                        self.last_status_logged = true;
+                    } else {
+                        self.add_log(LogLevel::Warning, "⚠️ Ollama server disconnected");
+                        self.last_status_logged = false;
+                    }
+                }
+                
                 self.status.is_running = is_running;
+                
                 if is_running {
-                    self.add_log(LogLevel::Info, "Ollama is running");
-
                     if let Ok(models) = self.ollama_client.list_models().await {
+                        // Log model changes
+                        if self.models.len() != self.last_model_count {
+                            if self.models.len() > self.last_model_count {
+                                let new_models = self.models.len() - self.last_model_count;
+                                self.add_log(
+                                    LogLevel::Info,
+                                    &format!("📦 {} new model(s) detected", new_models)
+                                );
+                            } else {
+                                let removed = self.last_model_count - self.models.len();
+                                self.add_log(
+                                    LogLevel::Info,
+                                    &format!("🗑️ {} model(s) removed", removed)
+                                );
+                            }
+                            self.last_model_count = self.models.len();
+                        }
+                        
                         self.models = models;
                         self.status.models_loaded = self.models.len();
                     }
 
                     if let Ok(running) = self.ollama_client.list_running_models().await {
+                        // Log when models start/stop running
+                        let running_count = running.len();
+                        let prev_count = self.running_models.len();
+                        
+                        if running_count != prev_count {
+                            if running_count > prev_count {
+                                for model in &running {
+                                    if !self.running_models.iter().any(|m| m.name == model.name) {
+                                        self.add_log(
+                                            LogLevel::Info,
+                                            &format!("▶️ Model started: {}", model.name)
+                                        );
+                                    }
+                                }
+                            } else {
+                                // Collect stopped models first to avoid borrow issues
+                                let stopped_models: Vec<String> = self.running_models
+                                    .iter()
+                                    .filter(|m| !running.iter().any(|r| r.name == m.name))
+                                    .map(|m| m.name.clone())
+                                    .collect();
+                                
+                                for model_name in stopped_models {
+                                    self.add_log(
+                                        LogLevel::Info,
+                                        &format!("⏹️ Model stopped: {}", model_name)
+                                    );
+                                }
+                            }
+                        }
+                        
                         self.running_models = running;
-
                         self.status.used_memory = self.running_models.iter().map(|m| m.size).sum();
                     }
-                } else {
-                    self.add_log(LogLevel::Warning, "Ollama is not responding");
                 }
             }
             Err(e) => {
-                self.add_log(LogLevel::Error, &format!("Failed to check status: {e}"));
+                if self.last_status_logged {
+                    self.add_log(LogLevel::Error, &format!("❌ Connection error: {e}"));
+                    self.last_status_logged = false;
+                }
                 self.status.is_running = false;
             }
         }
@@ -312,18 +375,18 @@ impl App {
         let model_name = self.pull_model_name.clone();
         self.show_pull_dialog = false;
 
-        self.add_log(LogLevel::Info, &format!("Pulling model: {model_name}"));
+        self.add_log(LogLevel::Info, &format!("🔽 Starting download: {model_name}"));
 
         match self.ollama_client.pull_model(&model_name).await {
             Ok(_) => {
                 self.add_log(
                     LogLevel::Info,
-                    &format!("Successfully pulled model: {model_name}"),
+                    &format!("✅ Successfully installed: {model_name}"),
                 );
                 self.refresh().await;
             }
             Err(e) => {
-                self.add_log(LogLevel::Error, &format!("Failed to pull model: {e}"));
+                self.add_log(LogLevel::Error, &format!("❌ Download failed: {e}"));
             }
         }
     }
@@ -334,7 +397,7 @@ impl App {
             self.show_delete_confirmation = true;
             self.add_log(
                 LogLevel::Warning,
-                &format!("Delete confirmation requested for: {}", model.name),
+                &format!("⚠️ Delete requested: {}", model.name),
             );
         }
     }
@@ -343,20 +406,20 @@ impl App {
         if let Some(model_name) = self.model_to_delete.clone() {
             self.add_log(
                 LogLevel::Warning,
-                &format!("Deleting model: {model_name}"),
+                &format!("🗑️ Deleting: {model_name}"),
             );
             match self.ollama_client.delete_model(&model_name).await {
                 Ok(_) => {
                     self.add_log(
                         LogLevel::Info,
-                        &format!("Successfully deleted: {model_name}"),
+                        &format!("✅ Deleted: {model_name}"),
                     );
                     self.refresh().await;
                 }
                 Err(e) => {
                     self.add_log(
                         LogLevel::Error,
-                        &format!("Failed to delete {model_name}: {e}"),
+                        &format!("❌ Delete failed for {model_name}: {e}"),
                     );
                 }
             }
@@ -368,7 +431,7 @@ impl App {
     pub fn cancel_delete(&mut self) {
         self.show_delete_confirmation = false;
         self.model_to_delete = None;
-        self.add_log(LogLevel::Info, "Delete cancelled");
+        self.add_log(LogLevel::Info, "🚫 Delete cancelled");
     }
 
     fn add_log(&mut self, level: LogLevel, message: &str) {
@@ -806,7 +869,7 @@ impl App {
 
         self.add_log(
             LogLevel::Info,
-            &format!("Sending message to {model_name}"),
+            &format!("💬 Chatting with {model_name}"),
         );
     }
 
@@ -861,7 +924,7 @@ impl App {
                             }
 
                             self.chat_response_receiver = None;
-                            self.add_log(LogLevel::Info, "Response completed");
+                            self.add_log(LogLevel::Info, "✅ Response completed");
                             return;
                         }
                     }
@@ -873,7 +936,7 @@ impl App {
                         // Channel disconnected
                         self.chat_state.current_session().is_streaming = false;
                         self.chat_response_receiver = None;
-                        self.add_log(LogLevel::Error, "Chat stream disconnected");
+                        self.add_log(LogLevel::Error, "❌ Chat stream disconnected");
                         break;
                     }
                 }
@@ -915,7 +978,7 @@ impl App {
             // Set the first available model as current
             if let Some(first_model) = model_names.first() {
                 self.chat_state.current_session().current_model = first_model.clone();
-                self.add_log(LogLevel::Info, &format!("Using model: {first_model}"));
+                self.add_log(LogLevel::Info, &format!("🤖 Chat model selected: {first_model}"));
             }
         } else {
             self.add_log(
