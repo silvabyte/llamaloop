@@ -25,6 +25,9 @@ pub struct ChatSession {
     pub input_buffer: String,
     pub total_tokens: usize,
     pub session_started: DateTime<Local>,
+    pub message_history: VecDeque<String>, // Store previous messages for navigation
+    pub history_index: Option<usize>,      // Current position in history
+    pub temp_input: String,                // Temporary storage when navigating history
 }
 
 impl ChatSession {
@@ -37,10 +40,22 @@ impl ChatSession {
             input_buffer: String::new(),
             total_tokens: 0,
             session_started: Local::now(),
+            message_history: VecDeque::new(),
+            history_index: None,
+            temp_input: String::new(),
         }
     }
 
     pub fn add_message(&mut self, role: MessageRole, content: String) {
+        // Add to history if it's a user message
+        if role == MessageRole::User {
+            self.message_history.push_front(content.clone());
+            // Keep only last 50 messages in history
+            while self.message_history.len() > 50 {
+                self.message_history.pop_back();
+            }
+        }
+
         let message = ChatMessage {
             role,
             content,
@@ -52,6 +67,53 @@ impl ChatSession {
         while self.messages.len() > 100 {
             self.messages.pop_front();
         }
+    }
+
+    pub fn navigate_history_up(&mut self) {
+        if self.message_history.is_empty() {
+            return;
+        }
+
+        match self.history_index {
+            None => {
+                // Save current input before starting navigation
+                self.temp_input = self.input_buffer.clone();
+                self.history_index = Some(0);
+                if let Some(msg) = self.message_history.front() {
+                    self.input_buffer = msg.clone();
+                }
+            }
+            Some(index) if index < self.message_history.len() - 1 => {
+                self.history_index = Some(index + 1);
+                if let Some(msg) = self.message_history.get(index + 1) {
+                    self.input_buffer = msg.clone();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn navigate_history_down(&mut self) {
+        match self.history_index {
+            Some(0) => {
+                // Restore original input
+                self.input_buffer = self.temp_input.clone();
+                self.history_index = None;
+                self.temp_input.clear();
+            }
+            Some(index) => {
+                self.history_index = Some(index - 1);
+                if let Some(msg) = self.message_history.get(index - 1) {
+                    self.input_buffer = msg.clone();
+                }
+            }
+            None => {}
+        }
+    }
+
+    pub fn reset_history_navigation(&mut self) {
+        self.history_index = None;
+        self.temp_input.clear();
     }
 
     pub fn clear_session(&mut self) {

@@ -165,7 +165,7 @@ pub fn pulse_color(base: Color, tick: usize) -> Color {
 }
 
 // Loop-inspired visual elements for llamaloop
-pub const LLAMALOOP_ASCII: &str = r#"
+pub const LLAMALOOP_ASCII: &str = r"
     ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
     ┃                                                        ┃
     ┃     ╭─╮  ╭─╮                     ╭─╮                  ┃
@@ -176,12 +176,12 @@ pub const LLAMALOOP_ASCII: &str = r#"
     ┃              ∞ Where AI Models Loop Eternal ∞         ┃
     ┃                                                        ┃
     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-"#;
+";
 
-pub const STARTUP_MESSAGE: &str = r#"
+pub const STARTUP_MESSAGE: &str = r"
     ╔════════════════════════════════════════════════════════╗
     ║  Initializing llamaloop v0.1.0                        ║
     ║  Part of the codeloops.ai universe                    ║
     ║  Tokyo Night Theme • Hypnotic Interface               ║
     ╚════════════════════════════════════════════════════════╝
-"#;
+";

@@ -29,7 +29,6 @@ pub struct App {
     pub models_view_mode: ModelsViewMode,
     pub models_tab_view: ModelsTabView,
     pub api_explorer_state: ApiExplorerState,
-    pub discovered_services: Vec<DiscoveredService>,
     pub chat_state: ChatState,
     pub chat_response_receiver: Option<mpsc::Receiver<ChatResponse>>,
     last_status_logged: bool, // Track if we already logged the current status
@@ -80,8 +79,6 @@ pub struct SystemStatus {
     pub models_loaded: usize,
     pub total_memory: u64,
     pub used_memory: u64,
-    pub cpu_usage: f32,
-    pub gpu_memory: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -92,15 +89,6 @@ pub struct ApiExplorerState {
     pub network_urls: Vec<String>,
     pub selected_url_index: usize,
     pub copied_url: Option<String>, // Track what was copied
-}
-
-#[derive(Clone)]
-pub struct DiscoveredService {
-    pub name: String,
-    pub ip: String,
-    pub port: u16,
-    pub is_reachable: bool,
-    pub version: Option<String>,
 }
 
 #[derive(Clone)]
@@ -128,8 +116,8 @@ impl App {
         api_endpoints_state.select(Some(0));
 
         Self {
-            selected_tab: 0,
-            current_screen: CurrentScreen::Dashboard,
+            selected_tab: 3,
+            current_screen: CurrentScreen::Chat,
             should_quit: false,
             models: Vec::new(),
             available_models: Vec::new(),
@@ -148,8 +136,6 @@ impl App {
                 models_loaded: 0,
                 total_memory: 0,
                 used_memory: 0,
-                cpu_usage: 0.0,
-                gpu_memory: None,
             },
             last_refresh: Local::now(),
             sparkle: Sparkle::new(),
@@ -164,7 +150,6 @@ impl App {
                 selected_url_index: 0,
                 copied_url: None,
             },
-            discovered_services: Vec::new(),
             chat_state: ChatState::new(Vec::new()),
             chat_response_receiver: None,
             last_status_logged: false,
@@ -684,57 +669,6 @@ impl App {
 
             self.api_explorer_state.copied_url = Some(url.clone());
             self.add_log(LogLevel::Info, &format!("📋 Copied to clipboard: {url}"));
-        }
-    }
-
-    pub async fn discover_local_services(&mut self) {
-        self.discovered_services.clear();
-        self.add_log(
-            LogLevel::Info,
-            "Scanning local network for Ollama services...",
-        );
-
-        // Scan common ports on local subnet
-        let base_ip = "192.168.1"; // Common local subnet
-        let ports = vec![11434, 11435, 8080, 3000];
-
-        for i in 1..255 {
-            for &port in &ports {
-                let ip = format!("{base_ip}.{i}");
-                let url = format!("http://{ip}:{port}/api/tags");
-
-                // Try to connect with a short timeout
-                match self
-                    .ollama_client
-                    .client
-                    .get(&url)
-                    .timeout(std::time::Duration::from_millis(100))
-                    .send()
-                    .await
-                {
-                    Ok(response) if response.status().is_success() => {
-                        self.discovered_services.push(DiscoveredService {
-                            name: format!("Ollama@{ip}"),
-                            ip: ip.clone(),
-                            port,
-                            is_reachable: true,
-                            version: None,
-                        });
-                        self.add_log(
-                            LogLevel::Info,
-                            &format!("Found Ollama service at {ip}:{port}"),
-                        );
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        if self.discovered_services.is_empty() {
-            self.add_log(
-                LogLevel::Info,
-                "No additional Ollama services found on local network",
-            );
         }
     }
 

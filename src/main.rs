@@ -83,15 +83,25 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                                     InputMode::Editing => {
                                         match key.code {
                                             KeyCode::Enter => {
+                                                app.chat_state.current_session().reset_history_navigation();
                                                 app.send_chat_message().await;
                                             }
                                             KeyCode::Esc => {
+                                                app.chat_state.current_session().reset_history_navigation();
                                                 app.toggle_chat_input_mode();
                                             }
                                             KeyCode::Backspace => {
+                                                app.chat_state.current_session().reset_history_navigation();
                                                 app.handle_chat_backspace();
                                             }
+                                            KeyCode::Up => {
+                                                app.chat_state.current_session().navigate_history_up();
+                                            }
+                                            KeyCode::Down => {
+                                                app.chat_state.current_session().navigate_history_down();
+                                            }
                                             KeyCode::Char(c) => {
+                                                app.chat_state.current_session().reset_history_navigation();
                                                 app.handle_chat_input(c);
                                             }
                                             _ => {}
@@ -99,7 +109,7 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                                     }
                                     InputMode::Normal => {
                                         match key.code {
-                                            KeyCode::Char('i') | KeyCode::Char('e') => {
+                                            KeyCode::Char('i' | 'e') => {
                                                 app.toggle_chat_input_mode();
                                             }
                                             KeyCode::Char('c') => {
@@ -257,10 +267,10 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
                                             app.cancel_delete();
                                         }
                                     }
-                                    KeyCode::Char('y') | KeyCode::Char('Y') if app.show_delete_confirmation => {
+                                    KeyCode::Char('y' | 'Y') if app.show_delete_confirmation => {
                                         app.confirm_delete_model().await;
                                     }
-                                    KeyCode::Char('n') | KeyCode::Char('N') if app.show_delete_confirmation => {
+                                    KeyCode::Char('n' | 'N') if app.show_delete_confirmation => {
                                         app.cancel_delete();
                                     }
                                     _ => {}

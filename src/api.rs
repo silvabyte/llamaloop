@@ -223,7 +223,7 @@ impl OllamaClient {
                         || model.id.contains("mixtral")
                     {
                         // Clean up the model ID for Ollama compatibility
-                        if model.id.contains("/") {
+                        if model.id.contains('/') {
                             // Extract the model name after the slash
                             if let Some(name) = model.id.split('/').next_back() {
                                 model.id = name.to_string();
