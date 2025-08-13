@@ -2,6 +2,7 @@ use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
 use futures_util::StreamExt;
 use tokio::sync::mpsc;
 
@@ -256,7 +257,20 @@ impl OllamaClient {
                 
                 if let Ok(response) = serde_json::from_str::<ChatResponse>(line) {
                     let is_done = response.done.unwrap_or(false);
-                    response_sender.send(response).await?;
+                    
+                    // Use try_send for non-blocking send to avoid slowing down the stream
+                    match response_sender.try_send(response) {
+                        Ok(_) => {},
+                        Err(mpsc::error::TrySendError::Full(resp)) => {
+                            // If the channel is full, wait a tiny bit and try again
+                            tokio::time::sleep(Duration::from_micros(100)).await;
+                            let _ = response_sender.try_send(resp);
+                        },
+                        Err(mpsc::error::TrySendError::Closed(_)) => {
+                            // Receiver dropped, stop processing
+                            return Ok(());
+                        }
+                    }
                     
                     if is_done {
                         break;

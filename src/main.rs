@@ -57,15 +57,16 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> Result
     loop {
         terminal.draw(|f| ui::draw(f, &mut app))?;
 
+        // Process chat responses immediately if streaming (for smooth experience)
+        if app.current_screen == CurrentScreen::Chat && app.chat_state.current_session().is_streaming {
+            app.process_chat_response().await;
+        }
+
         tokio::select! {
             _ = tick_interval.tick() => {
                 app.on_tick().await;
-                // Process chat responses if streaming
-                if app.current_screen == CurrentScreen::Chat {
-                    app.process_chat_response().await;
-                }
             }
-            _ = tokio::time::sleep(Duration::from_millis(50)) => {
+            _ = tokio::time::sleep(Duration::from_millis(10)) => {
                 if event::poll(Duration::from_millis(0))? {
                     if let Event::Key(key) = event::read()? {
                         match app.current_screen {

@@ -7,8 +7,10 @@
 | Model | Context | Memory | Purpose |
 |-------|---------|--------|---------|
 | **qwen-coder-ultra** | 12,288 tokens | ~25GB | Maximum context using your Q4 model |
-| **qwen-coder-tools** | 8,192 tokens | ~25GB | Tool calling & JSON output |
-| **qwen-coder-function** | 8,192 tokens | ~25GB | OpenAI-compatible functions |
+| **qwen-coder-tools-v2** ✅ | 8,192 tokens | ~25GB | Working tool simulation for Ollama |
+| **qwen-coder-function-v2** ✅ | 8,192 tokens | ~25GB | Working function calls for Ollama |
+| **qwen-coder-tools** | 8,192 tokens | ~25GB | Tool calling (original) |
+| **qwen-coder-function** | 8,192 tokens | ~25GB | Function calling (original) |
 | **qwen-coder-maxcontext** | 6,144 tokens | ~30GB | Stable large context |
 | **qwen3-coder:30b** | 4,096 tokens | ~20GB | Base model (fastest) |
 | **qwen3-coder:30b-a3b-q4_K_M** | 4,096 tokens | ~10GB | Your quantized base |
@@ -27,15 +29,37 @@
 
 ## Testing Your Models:
 
+### V2 Models (Working with Ollama!) ✅
+
 ```bash
+# Test working tool simulation
+ollama run qwen-coder-tools-v2 "Use the web_search tool to find Python 3.12 features"
+# Output will include:
+# ```tool:web_search
+# query: Python 3.12 new features latest updates
+# ```
+# [Followed by simulated results]
+
+# Test working function calls
+ollama run qwen-coder-function-v2 "What's the weather in Tokyo?"
+# Output will include:
+# ### FUNCTION_CALL_START
+# function_name: get_weather
+# parameters:
+#   location: Tokyo, Japan
+# ### FUNCTION_CALL_END
+# [Followed by simulated weather data]
+
 # Test ultra context (12k tokens!)
-ollama run qwen-coder-ultra "You have 12k context. Analyze this entire codebase..."
+ollama run qwen-coder-ultra "Analyze this entire codebase..."
+```
 
-# Test tool calling
-ollama run qwen-coder-tools "Create a function to search and return JSON"
+### Original Models (JSON format)
 
-# Test function calling
-ollama run qwen-coder-function "Call the weather API for San Francisco"
+```bash
+# These output JSON but may not generate actual tool calls
+ollama run qwen-coder-tools "Create a function to search"
+ollama run qwen-coder-function "Call the weather API"
 ```
 
 ## Model Selection Guide:

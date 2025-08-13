@@ -34,8 +34,27 @@ echo ""
 echo "Building custom models..."
 echo ""
 
-# 1. Tool-calling version
-echo "1. Building qwen-coder-tools (with tool calling support)..."
+# Build V2 models (working tool simulation for Ollama)
+echo "1. Building qwen-coder-tools-v2 (working tool simulation)..."
+if ollama create qwen-coder-tools-v2 -f "$MODELFILES_DIR/qwen-coder-tools-v2.Modelfile"; then
+    echo "   ✅ Successfully created qwen-coder-tools-v2"
+else
+    echo "   ❌ Failed to create qwen-coder-tools-v2"
+fi
+
+echo ""
+
+echo "2. Building qwen-coder-function-v2 (working function calls)..."
+if ollama create qwen-coder-function-v2 -f "$MODELFILES_DIR/qwen-coder-function-v2.Modelfile"; then
+    echo "   ✅ Successfully created qwen-coder-function-v2"
+else
+    echo "   ❌ Failed to create qwen-coder-function-v2"
+fi
+
+echo ""
+
+# Original models (for compatibility)
+echo "3. Building qwen-coder-tools (original)..."
 if ollama create qwen-coder-tools -f "$MODELFILES_DIR/qwen-coder-tools.Modelfile"; then
     echo "   ✅ Successfully created qwen-coder-tools"
 else
@@ -44,18 +63,7 @@ fi
 
 echo ""
 
-# 2. Advanced version
-echo "2. Building qwen-coder-advanced (with web search & enhanced features)..."
-if ollama create qwen-coder-advanced -f "$MODELFILES_DIR/qwen-coder-advanced.Modelfile"; then
-    echo "   ✅ Successfully created qwen-coder-advanced"
-else
-    echo "   ❌ Failed to create qwen-coder-advanced"
-fi
-
-echo ""
-
-# 3. Function calling version
-echo "3. Building qwen-coder-function (OpenAI-compatible function calling)..."
+echo "4. Building qwen-coder-function (original)..."
 if ollama create qwen-coder-function -f "$MODELFILES_DIR/qwen-coder-function.Modelfile"; then
     echo "   ✅ Successfully created qwen-coder-function"
 else
@@ -64,8 +72,22 @@ fi
 
 echo ""
 
-# 4. Max context version
-echo "4. Building qwen-coder-maxcontext (6k context for large files)..."
+# Advanced version
+echo "5. Building qwen-coder-advanced (with web search & enhanced features)..."
+if [ -f "$MODELFILES_DIR/qwen-coder-advanced.Modelfile" ]; then
+    if ollama create qwen-coder-advanced -f "$MODELFILES_DIR/qwen-coder-advanced.Modelfile"; then
+        echo "   ✅ Successfully created qwen-coder-advanced"
+    else
+        echo "   ❌ Failed to create qwen-coder-advanced"
+    fi
+else
+    echo "   ⚠️  Skipping qwen-coder-advanced (modelfile not found)"
+fi
+
+echo ""
+
+# Max context version
+echo "6. Building qwen-coder-maxcontext (6k context for large files)..."
 if ollama create qwen-coder-maxcontext -f "$MODELFILES_DIR/qwen-coder-maxcontext.Modelfile"; then
     echo "   ✅ Successfully created qwen-coder-maxcontext"
 else
@@ -74,9 +96,9 @@ fi
 
 echo ""
 
-# 5. Ultra context version (needs quantized model)
-echo "5. Checking for ultra context version (requires quantized model)..."
-if ollama list | grep -q "qwen3-coder:30b-q4_K_M"; then
+# Ultra context version (needs quantized model)
+echo "7. Checking for ultra context version (requires quantized model)..."
+if ollama list | grep -q "qwen3-coder:30b-a3b-q4_K_M"; then
     echo "   Building qwen-coder-ultra (12k context with quantization)..."
     if ollama create qwen-coder-ultra -f "$MODELFILES_DIR/qwen-coder-ultra.Modelfile"; then
         echo "   ✅ Successfully created qwen-coder-ultra"
@@ -85,7 +107,7 @@ if ollama list | grep -q "qwen3-coder:30b-q4_K_M"; then
     fi
 else
     echo "   ⚠️  Skipping qwen-coder-ultra (requires quantized model)"
-    echo "   To enable: ollama pull qwen3-coder:30b-q4_K_M"
+    echo "   To enable: ollama pull qwen3-coder:30b-a3b-q4_K_M"
 fi
 
 echo ""
@@ -96,22 +118,37 @@ ollama list | grep -E "qwen|NAME"
 
 echo ""
 echo "========================================="
-echo "🧪 Testing Tool Calling"
+echo "🧪 Testing Tool Calling (V2 Models)"
 echo "========================================="
 echo ""
 
-# Test tool calling
-echo "Testing qwen-coder-tools with a tool call request..."
+# Test V2 tool calling
+echo "Testing qwen-coder-tools-v2 with a tool call request..."
 echo ""
 
-TEST_PROMPT='Please search for the latest version of React and tell me about the new features. Use the web_search tool.'
+TEST_PROMPT='Use the web_search tool to find information about Python 3.12 features'
 
 echo "Prompt: $TEST_PROMPT"
 echo ""
-echo "Response:"
+echo "Response from qwen-coder-tools-v2:"
 echo "---"
 
-ollama run qwen-coder-tools "$TEST_PROMPT" --verbose 2>/dev/null | head -20
+ollama run qwen-coder-tools-v2 "$TEST_PROMPT" 2>/dev/null | head -30
+
+echo "---"
+echo ""
+
+echo "Testing qwen-coder-function-v2 with a function call request..."
+echo ""
+
+FUNCTION_TEST='What is the weather in San Francisco? Use the get_weather function.'
+
+echo "Prompt: $FUNCTION_TEST"
+echo ""
+echo "Response from qwen-coder-function-v2:"
+echo "---"
+
+ollama run qwen-coder-function-v2 "$FUNCTION_TEST" 2>/dev/null | head -30
 
 echo "---"
 echo ""
@@ -119,18 +156,19 @@ echo "========================================="
 echo "🎯 Usage Examples:"
 echo "========================================="
 echo ""
-echo "1. Basic tool calling:"
-echo '   ollama run qwen-coder-tools "Use the web_search tool to find Python 3.12 features"'
+echo "1. Working tool simulation (V2):"
+echo '   ollama run qwen-coder-tools-v2 "Search for React 19 features"'
 echo ""
-echo "2. Advanced features:"
-echo '   ollama run qwen-coder-advanced "/search latest TypeScript features"'
+echo "2. Working function calls (V2):"
+echo '   ollama run qwen-coder-function-v2 "Get the weather in Tokyo"'
 echo ""
-echo "3. Code generation with tools:"
-echo '   ollama run qwen-coder-tools "Create a Python script that fetches weather data"'
+echo "3. Maximum context (12k tokens):"
+echo '   ollama run qwen-coder-ultra "Analyze this large codebase..."'
 echo ""
-echo "4. In your chat app:"
-echo "   - Select 'qwen-coder-tools' or 'qwen-coder-advanced' as your model"
-echo "   - The model will recognize tool calling patterns automatically"
+echo "4. In llamaloop chat:"
+echo "   - Press 'm' to select model"
+echo "   - Choose 'qwen-coder-tools-v2' for tool simulation"
+echo "   - Choose 'qwen-coder-function-v2' for function calls"
 echo ""
 echo "========================================="
 echo "✅ Custom models ready to use!"

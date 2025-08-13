@@ -742,39 +742,61 @@ impl App {
 
     pub async fn process_chat_response(&mut self) {
         if let Some(receiver) = &mut self.chat_response_receiver {
-            if let Ok(response) = receiver.try_recv() {
-                if let Some(message) = response.message {
-                    match message.role.as_str() {
-                        "assistant" => {
-                            self.chat_state.current_session().current_response.push_str(&message.content);
+            // Process all available messages for smooth streaming
+            let mut messages_processed = 0;
+            const MAX_MESSAGES_PER_BATCH: usize = 10; // Process up to 10 messages per call
+            
+            while messages_processed < MAX_MESSAGES_PER_BATCH {
+                match receiver.try_recv() {
+                    Ok(response) => {
+                        messages_processed += 1;
+                        
+                        if let Some(message) = response.message {
+                            match message.role.as_str() {
+                                "assistant" => {
+                                    self.chat_state.current_session().current_response.push_str(&message.content);
+                                }
+                                "system" => {
+                                    // This is an error message
+                                    self.chat_state.current_session().add_message(MessageRole::System, message.content);
+                                    self.chat_state.current_session().is_streaming = false;
+                                    self.chat_response_receiver = None;
+                                    return;
+                                }
+                                _ => {}
+                            }
                         }
-                        "system" => {
-                            // This is an error message
-                            self.chat_state.current_session().add_message(MessageRole::System, message.content);
+                        
+                        if response.done.unwrap_or(false) {
+                            // Finalize the response
+                            let final_response = self.chat_state.current_session().current_response.clone();
+                            if !final_response.is_empty() {
+                                self.chat_state.current_session().add_message(MessageRole::Assistant, final_response);
+                            }
                             self.chat_state.current_session().is_streaming = false;
+                            self.chat_state.current_session().current_response.clear();
+                            
+                            // Update token count
+                            if let Some(eval_count) = response.eval_count {
+                                self.chat_state.current_session().total_tokens += eval_count as usize;
+                            }
+                            
                             self.chat_response_receiver = None;
+                            self.add_log(LogLevel::Info, "Response completed");
                             return;
                         }
-                        _ => {}
                     }
-                }
-                
-                if response.done.unwrap_or(false) {
-                    // Finalize the response
-                    let final_response = self.chat_state.current_session().current_response.clone();
-                    if !final_response.is_empty() {
-                        self.chat_state.current_session().add_message(MessageRole::Assistant, final_response);
+                    Err(mpsc::error::TryRecvError::Empty) => {
+                        // No more messages available
+                        break;
                     }
-                    self.chat_state.current_session().is_streaming = false;
-                    self.chat_state.current_session().current_response.clear();
-                    
-                    // Update token count
-                    if let Some(eval_count) = response.eval_count {
-                        self.chat_state.current_session().total_tokens += eval_count as usize;
+                    Err(mpsc::error::TryRecvError::Disconnected) => {
+                        // Channel disconnected
+                        self.chat_state.current_session().is_streaming = false;
+                        self.chat_response_receiver = None;
+                        self.add_log(LogLevel::Error, "Chat stream disconnected");
+                        break;
                     }
-                    
-                    self.chat_response_receiver = None;
-                    self.add_log(LogLevel::Info, "Response completed");
                 }
             }
         }
